@@ -1,0 +1,31 @@
+{
+    "name": "driver",
+    "description": "",
+    "dependencies": {
+        "core": "*",
+        "radio": "*",
+        "microphone": "*",
+        "huskylens2": "github:dfrobot/pxt-dfrobot_huskylensv2#v1.1.7",
+        "robotbit": "github:kittenbot/pxt-robotbit#v0.4.8"
+    },
+    "files": [
+        "main.blocks",
+        "main.ts",
+        "README.md"
+    ],
+    "testFiles": [
+        "test.ts"
+    ],
+    "targetVersions": {
+        "branch": "stable9.0",
+        "tag": "v9.0.12",
+        "commits": "https://github.com/microsoft/pxt-microbit/commits/49d8b2a09658f4c68bdde0d80757f02138c5d913",
+        "target": "9.0.12",
+        "pxt": "13.0.9",
+        "targetId": "microbit"
+    },
+    "supportedTargets": [
+        "microbit"
+    ],
+    "preferredEditor": "blocksprj"
+}
