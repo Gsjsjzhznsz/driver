@@ -1,7 +1,7 @@
 // ============================================================
 // 司机打瞌睡识别报警系统（micro:bit + RobotBit + HUSKYLENS 2）
 // 姿态 Id 约定：1 = 清醒　2 = 打瞌睡（重度报警）　3 = 疲劳征兆（预警）
-// 结构：循环1轮询分发，循环2/3后台执行动作，互不阻塞
+// 结构：循环1轮询分发，循环2报警/循环3预警/循环4振动后台并行，互不阻塞
 // ============================================================
 
 // ---------- 可调参数（改数值即可，无需动逻辑） ----------
@@ -9,8 +9,7 @@ let 报警音调 = 262   // 报警长鸣音调（Hz）
 let 报警次数 = 3     // 报警长鸣次数（每次约1秒）
 let 闪灯次数 = 2     // 红灯闪烁组数（亮+灭为一组）
 let 闪灯间隔 = 500   // 红灯亮/灭时长（毫秒）
-let 电机速度 = 255   // M1A 电机速度（-255 ~ 255）
-let 电机时长 = 1     // 电机运转秒数
+let 电机速度 = 255   // M1A 振动电机速度（-255~255，报警全程持续振动）
 let 预警音调 = 262   // 预警快滴音调（Hz）
 let 预警次数 = 3     // 预警快滴次数（每次约0.5秒）
 let 轮询间隔 = 50    // 姿态轮询间隔（毫秒），避免全速刷I2C
@@ -20,6 +19,7 @@ let 丢失超时 = 5000  // 连续这么久检测不到司机，就停电机并�
 let 动作中 = false   // 报警/预警动作正在后台执行
 let 报警请求 = false
 let 预警请求 = false
+let 振动请求 = false
 let 丢失停机 = false // 已因丢失姿态而停机
 let 最后检测时间 = 0
 
@@ -73,6 +73,7 @@ basic.forever(function () {
 basic.forever(function () {
     if (报警请求) {
         报警请求 = false
+        振动请求 = true   // 振动与警报同时开始
         for (let i = 0; i < 报警次数; i++) {
             music.play(music.tonePlayable(报警音调, music.beat(BeatFraction.Half)), music.PlaybackMode.UntilDone)
         }
@@ -82,10 +83,7 @@ basic.forever(function () {
             strip.clear()
             basic.pause(闪灯间隔)
         }
-        if (!(丢失停机)) {
-            // 报警期间若已判定丢失姿态，则跳过电机动作
-            robotbit.MotorRunDelay(robotbit.Motors.M1A, 电机速度, 电机时长)
-        }
+        robotbit.MotorStop(robotbit.Motors.M1A)  // 报警结束，停止振动
         动作中 = false
     }
     basic.pause(20)
@@ -99,6 +97,18 @@ basic.forever(function () {
             music.play(music.tonePlayable(预警音调, music.beat(BeatFraction.Quarter)), music.PlaybackMode.UntilDone)
         }
         动作中 = false
+    }
+    basic.pause(20)
+})
+
+// ---------- 循环 4：振动与警报同步执行（后台） ----------
+basic.forever(function () {
+    if (振动请求) {
+        振动请求 = false
+        if (!(丢失停机)) {
+            // 已判定丢失姿态则不振动
+            robotbit.MotorRun(robotbit.Motors.M1A, 电机速度)
+        }
     }
     basic.pause(20)
 })
