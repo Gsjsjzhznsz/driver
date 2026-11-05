@@ -14,11 +14,14 @@ let 电机时长 = 1     // 电机运转秒数
 let 预警音调 = 262   // 预警快滴音调（Hz）
 let 预警次数 = 3     // 预警快滴次数（每次约0.5秒）
 let 轮询间隔 = 50    // 姿态轮询间隔（毫秒），避免全速刷I2C
+let 丢失超时 = 5000  // 连续这么久检测不到司机，就停电机并清灯（毫秒）
 
 // ---------- 运行状态（无需修改） ----------
 let 动作中 = false   // 报警/预警动作正在后台执行
 let 报警请求 = false
 let 预警请求 = false
+let 丢失停机 = false // 已因丢失姿态而停机
+let 最后检测时间 = 0
 
 // ---------- 硬件初始化 ----------
 huskylens2.I2CInit()
@@ -30,6 +33,8 @@ robotbit.MotorStop(robotbit.Motors.M1A)  // 上电确保电机停止
 basic.forever(function () {
     huskylens2.getResultPoseRecognition()
     if (huskylens2.availablePoseRecognition()) {
+        最后检测时间 = input.runningTime()
+        丢失停机 = false
         if (!(动作中)) {
             if (huskylens2.poseIdExists(1)) {
                 // 清醒：绿灯
@@ -53,6 +58,12 @@ basic.forever(function () {
     } else {
         if (!(动作中)) {
             basic.showIcon(IconNames.No)
+            if (input.runningTime() - 最后检测时间 > 丢失超时 && !(丢失停机)) {
+                // 行为保护：长时间看不到司机，停电机并清灯（只执行一次）
+                robotbit.MotorStop(robotbit.Motors.M1A)
+                strip.clear()
+                丢失停机 = true
+            }
         }
     }
     basic.pause(轮询间隔)
@@ -71,7 +82,10 @@ basic.forever(function () {
             strip.clear()
             basic.pause(闪灯间隔)
         }
-        robotbit.MotorRunDelay(robotbit.Motors.M1A, 电机速度, 电机时长)
+        if (!(丢失停机)) {
+            // 报警期间若已判定丢失姿态，则跳过电机动作
+            robotbit.MotorRunDelay(robotbit.Motors.M1A, 电机速度, 电机时长)
+        }
         动作中 = false
     }
     basic.pause(20)
