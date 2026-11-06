@@ -160,7 +160,7 @@ sequenceDiagram
 
 1. 打开 [makecode.microbit.org](https://makecode.microbit.org/)
 2. 点击 **导入** → **导入 URL**，粘贴 `https://github.com/Gsjsjzhznsz/driver` 并导入
-3. 积木视图中，**带黄色便签图标的积木**可点开查看中文说明；画布左上角有项目总览浮动便签
+3. 积木视图中，**带黄色便签图标的积木**可点开查看中文说明；画布上（on start 积木下方）还有一条黄色项目总览便签
 4. 下载 `.hex` 到 micro:bit，装上 RobotBit 与 HUSKYLENS 2 即可运行
 5. 若浏览器中打开的还是旧版项目，请 **导入 → 从 GitHub 重新导入一次**（MakeCode 会缓存已打开的项目）
 
