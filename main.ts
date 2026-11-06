@@ -7,11 +7,11 @@ let 报警音调 = 262   // 报警长鸣音调（Hz）
 let 报警次数 = 3     // 报警长鸣次数（每次约1秒）
 let 闪灯次数 = 2     // 红灯闪烁组数（亮+灭为一组）
 let 闪灯间隔 = 500   // 红灯亮/灭时长（毫秒）
-let 电机速度 = 255   // 振动电机速度（-255~255，报警全程持续振动）
+let 马达速度 = 255   // 方向盘振动马达速度（0~255，数值越大振动越强）
 let 预警音调 = 262   // 预警快滴音调（Hz）
 let 预警次数 = 3     // 预警快滴次数（每次约0.5秒）
 let 轮询间隔 = 50    // 姿态轮询间隔（毫秒），避免全速刷I2C
-let 丢失超时 = 5000  // 连续这么久检测不到司机，就停电机并清灯（毫秒）
+let 丢失超时 = 5000  // 连续这么久检测不到司机，就停马达并清灯（毫秒）
 let 疲劳升级毫秒 = 10000  // 疲劳征兆持续超过该时长，升级为重度报警（毫秒）
 
 // 运行状态区：程序自动维护，无需修改
@@ -23,11 +23,11 @@ let 丢失停机 = false // 已因丢失姿态而停机
 let 首次疲劳时间 = 0 // 疲劳征兆首次出现的时间，用于持续计时
 let 最后检测时间 = 0
 
-// 硬件初始化区：HUSKYLENS 用 I2C（P19/P20），灯与电机走 RobotBit
+// 硬件初始化区：HUSKYLENS 用 I2C（P19/P20），灯与方向盘振动马达走 RobotBit
 huskylens2.I2CInit()
 huskylens2.switchAlgorithm(huskylens2.Algorithm.AlgorithmPoseRecognition)
 let strip = robotbit.rgb()
-robotbit.MotorStop(robotbit.Motors.M1A)  // 上电先确保电机停止
+robotbit.MotorStop(robotbit.Motors.M1A)  // 上电先确保振动马达停止
 // 开机自检：短鸣一声、绿灯亮0.5秒，表示初始化完成
 music.play(music.tonePlayable(预警音调, music.beat(BeatFraction.Quarter)), music.PlaybackMode.UntilDone)
 strip.showColor(neopixel.colors(NeoPixelColors.Green))
@@ -76,7 +76,7 @@ basic.forever(function () {
     } else {
         if (!(动作中)) {
             basic.showIcon(IconNames.No)
-            // 行为保护：超过丢失超时仍看不到司机，停电机并清灯（只执行一次）
+            // 行为保护：超过丢失超时仍看不到司机，停马达并清灯（只执行一次）
             if (input.runningTime() - 最后检测时间 > 丢失超时 && !(丢失停机)) {
                 robotbit.MotorStop(robotbit.Motors.M1A)
                 strip.clear()
@@ -119,13 +119,13 @@ basic.forever(function () {
     basic.pause(20)
 })
 
-// 循环4 同步振动：与报警声光同时启动振动电机
+// 循环4 同步振动：与报警声光同时启动方向盘振动马达
 basic.forever(function () {
     if (振动请求) {
         振动请求 = false
         if (!(丢失停机)) {
             // 已判定丢失姿态则不振动
-            robotbit.MotorRun(robotbit.Motors.M1A, 电机速度)
+            robotbit.MotorRun(robotbit.Motors.M1A, 马达速度)
         }
     }
     basic.pause(20)
