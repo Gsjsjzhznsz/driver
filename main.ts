@@ -1,14 +1,14 @@
 // 司机打瞌睡识别报警系统（micro:bit + RobotBit + HUSKYLENS 2）
 // 姿态 ID 约定：1=清醒　2=打瞌睡（重度报警）　3=疲劳征兆（预警）
-// 四个 forever 循环并行工作：检测分发 / 重度报警 / 轻度预警 / 同步振动
+// 四个 forever 循环并行工作：检测分发（含屏幕状态显示） / 重度报警 / 轻度预警 / 同步振动
 
 // 可调参数区：只改数值即可调整系统行为，无需改动逻辑
-let 报警音调 = 262   // 报警长鸣音调（Hz）
+let 报警音调 = 988   // 报警长鸣音调（Hz）
 let 报警次数 = 3     // 报警长鸣次数（每次约1秒）
 let 闪灯次数 = 2     // 红灯闪烁组数（亮+灭为一组）
 let 闪灯间隔 = 500   // 红灯亮/灭时长（毫秒）
 let 马达速度 = 255   // 方向盘振动马达速度（0~255，数值越大振动越强）
-let 预警音调 = 262   // 预警快滴音调（Hz）
+let 预警音调 = 900   // 预警快滴音调（Hz）
 let 预警次数 = 3     // 预警快滴次数（每次约0.5秒）
 let 轮询间隔 = 50    // 姿态轮询间隔（毫秒），避免全速刷I2C
 let 丢失超时 = 5000  // 连续这么久检测不到司机，就停马达并清灯（毫秒）
@@ -22,6 +22,7 @@ let 振动请求 = false
 let 丢失停机 = false // 已因丢失姿态而停机
 let 首次疲劳时间 = 0 // 疲劳征兆首次出现的时间，用于持续计时
 let 最后检测时间 = 0
+let 屏幕状态 = 0 // 摄像头屏幕当前状态：1=清醒 2=疲劳预警 3=打瞌睡报警 4=姿态未识别 5=监测中(开机) 6=未检测到司机
 
 // 硬件初始化区：HUSKYLENS 用 I2C（P19/P20），灯与方向盘振动马达走 RobotBit
 huskylens2.I2CInit()
@@ -33,8 +34,12 @@ music.play(music.tonePlayable(预警音调, music.beat(BeatFraction.Quarter)), m
 strip.showColor(neopixel.colors(NeoPixelColors.Green))
 basic.pause(500)
 strip.clear()
+// 屏幕：开机显示“监测中”，观众从摄像头屏幕即可看到系统已就绪
+huskylens2.clearText()
+huskylens2.showText(huskylens2.setRGB(0, 255, 0), huskylens2.FontSize.Font48, 8, 4, "状态：监测中")
+屏幕状态 = 5
 
-// 循环1 主循环：按轮询间隔读取姿态，按ID亮灯并派发任务
+// 循环1 主循环：按轮询间隔读取姿态，按ID亮灯/更新屏幕状态并派发任务
 basic.forever(function () {
     huskylens2.getResultPoseRecognition()
     if (huskylens2.availablePoseRecognition()) {
@@ -46,12 +51,24 @@ basic.forever(function () {
                 basic.showIcon(IconNames.Happy)
                 strip.showColor(neopixel.colors(NeoPixelColors.Green))
                 首次疲劳时间 = 0  // 恢复清醒，清空疲劳计时
+                // 屏幕：只在状态变化时刷新，不拖慢轮询
+                if (屏幕状态 != 1) {
+                    huskylens2.clearText()
+                    huskylens2.showText(huskylens2.setRGB(0, 255, 0), huskylens2.FontSize.Font48, 8, 4, "状态：清醒")
+                    屏幕状态 = 1
+                }
             } else if (huskylens2.poseIdExists(2)) {
                 // 打瞌睡：请求重度报警，振动同时开始
                 basic.showIcon(IconNames.Sad)
                 首次疲劳时间 = 0
                 动作中 = true
                 报警请求 = true
+                // 屏幕：红色报警大字，报警全程保持显示
+                if (屏幕状态 != 3) {
+                    huskylens2.clearText()
+                    huskylens2.showText(huskylens2.setRGB(255, 0, 0), huskylens2.FontSize.Font48, 8, 4, "状态：打瞌睡报警")
+                    屏幕状态 = 3
+                }
             } else if (huskylens2.poseIdExists(3)) {
                 // 疲劳征兆：红灯
                 basic.showIcon(IconNames.Scissors)
@@ -65,17 +82,41 @@ basic.forever(function () {
                 if (input.runningTime() - 首次疲劳时间 > 疲劳升级毫秒) {
                     首次疲劳时间 = 0
                     报警请求 = true
+                    // 屏幕：疲劳太久，升级为报警
+                    if (屏幕状态 != 3) {
+                        huskylens2.clearText()
+                        huskylens2.showText(huskylens2.setRGB(255, 0, 0), huskylens2.FontSize.Font48, 8, 4, "状态：打瞌睡报警")
+                        屏幕状态 = 3
+                    }
                 } else {
                     预警请求 = true
+                    // 屏幕：黄色预警提示观众
+                    if (屏幕状态 != 2) {
+                        huskylens2.clearText()
+                        huskylens2.showText(huskylens2.setRGB(255, 255, 0), huskylens2.FontSize.Font48, 8, 4, "状态：疲劳预警")
+                        屏幕状态 = 2
+                    }
                 }
             } else {
                 basic.showIcon(IconNames.No)
                 首次疲劳时间 = 0
+                // 屏幕：可见姿态不匹配已学习的ID
+                if (屏幕状态 != 4) {
+                    huskylens2.clearText()
+                    huskylens2.showText(huskylens2.setRGB(255, 255, 255), huskylens2.FontSize.Font48, 8, 4, "状态：姿态未识别")
+                    屏幕状态 = 4
+                }
             }
         }
     } else {
         if (!(动作中)) {
             basic.showIcon(IconNames.No)
+            // 屏幕：看不到司机，立即提示观众
+            if (屏幕状态 != 6) {
+                huskylens2.clearText()
+                huskylens2.showText(huskylens2.setRGB(255, 255, 255), huskylens2.FontSize.Font48, 8, 4, "状态：未检测到司机")
+                屏幕状态 = 6
+            }
             // 行为保护：超过丢失超时仍看不到司机，停马达并清灯（只执行一次）
             if (input.runningTime() - 最后检测时间 > 丢失超时 && !(丢失停机)) {
                 robotbit.MotorStop(robotbit.Motors.M1A)
