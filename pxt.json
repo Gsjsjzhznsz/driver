@@ -11,6 +11,7 @@
     "files": [
         "main.blocks",
         "main.ts",
+        "screenfix.ts",
         "README.md"
     ],
     "testFiles": [
