@@ -21,12 +21,21 @@
 // 屏幕参数（官方协议）：分辨率 640x480，坐标原点左上角，x:0~640、y:0~480；
 //   字号仅支持 20/24/26/27/28/32/36/40/48（无效字号固件拒绝不画）；
 //   颜色 0xRRGGBB，huskylens2.setRGB 的返回值可直接使用。
+// 满屏状态背景（fillRect）：官方协议 ACTION_DRAW_RECT(0x26) 画描边矩形，
+//   Data(14) = 保留(1)+线宽(1)+x(2)+y(2)+宽(2)+高(2)+RGBA(4)@10——矩形布局
+//   新旧固件一致（扩展 drawBox 与官方库 drawRect 同为此布局），无需按版本分支；
+//   ACTION_CLEAN_RECT(0x27) 清除所有已绘制矩形。线宽为 1 字节（0~255），固件
+//   沿矩形边按线宽描边；要铺满整屏，画“线宽 255 的外框(0,0,640,480) + 内框
+//   (128,128,384,224)”两层嵌套叠加，无论固件把描边画在边线内侧还是居中，
+//   两层相加都必然覆盖整屏；切换状态先发 0x27 清旧矩形再画新背景。
 // 帧格式：0x55 0xAA | 命令 | 算法ID | 数据长度(1字节) | 数据 | 校验和(累加和&0xFF)。
 
 //% color=#00B0A8 weight=95
 namespace ScreenFix {
     const HL_ADDR = 0x50          // HUSKYLENS 2 的 I2C 地址
     const CMD_KNOCK = 0x00        // 官方协议：握手（告知主机是小内存板，允许分块收包）
+    const CMD_DRAW_RECT = 0x26    // 官方协议：绘制（描边）矩形
+    const CMD_CLEAN_RECT = 0x27   // 官方协议：清除所有已绘制矩形
     const CMD_DRAW_TEXT = 0x28    // 官方协议：绘制文字
     const CMD_CLEAR_TEXT = 0x29   // 官方协议：清除所有文字
     const CMD_RETURN_ARGS = 0x1A  // 官方协议：命令应答帧（retValue=0 表示成功）
@@ -66,6 +75,56 @@ namespace ScreenFix {
         pkt[1] = 0xAA
         pkt[2] = CMD_CLEAR_TEXT
         pkt[5] = checksum(pkt, 5)
+        sendChunked(pkt)
+        readRetValue(120)
+    }
+
+    //% blockId="ScreenFix_fillRect" block="屏幕填满颜色 %color"
+    //% color.min=0
+    //% weight=89
+    export function fillRect(color: number): void {
+        ensureKnock()
+        clearRects()
+        // 两层线宽 255 的嵌套矩形：外框铺满四周边缘，内框补齐中心区域，
+        // 无论固件描边向内还是居中，两层相加都必然铺满 640x480 整屏
+        drawRectRaw(color, 255, 0, 0, 640, 480)
+        drawRectRaw(color, 255, 128, 128, 384, 224)
+    }
+
+    // 清除所有已绘制矩形（0x27）：换状态背景前调用，防止旧色块残留
+    function clearRects(): void {
+        const pkt = Buffer.create(6)  // Buffer 默认全 0：算法ID=0(任意)、数据长度=0
+        pkt[0] = 0x55
+        pkt[1] = 0xAA
+        pkt[2] = CMD_CLEAN_RECT
+        pkt[5] = checksum(pkt, 5)
+        sendChunked(pkt)
+        readRetValue(120)
+    }
+
+    // 画描边矩形（0x26）：Data(14) = 保留+线宽+x(2)+y(2)+宽(2)+高(2)+RGBA(4)@10，
+    // 布局新旧固件一致，无需按协议版本分支；帧共 5+14+1=20 字节，单块即可发送
+    function drawRectRaw(color: number, lineWidth: number, x: number, y: number, w: number, h: number): void {
+        const pkt = Buffer.create(20)
+        pkt[6] = lineWidth       // Data[1]
+        pkt[7] = x & 0xFF        // Data[2..3]
+        pkt[8] = (x >> 8) & 0xFF
+        pkt[9] = y & 0xFF        // Data[4..5]
+        pkt[10] = (y >> 8) & 0xFF
+        pkt[11] = w & 0xFF       // Data[6..7]
+        pkt[12] = (w >> 8) & 0xFF
+        pkt[13] = h & 0xFF       // Data[8..9]
+        pkt[14] = (h >> 8) & 0xFF
+        pkt[15] = color & 0xFF   // Data[10..13] RGBA
+        pkt[16] = (color >> 8) & 0xFF
+        pkt[17] = (color >> 16) & 0xFF
+        pkt[18] = (color >> 24) & 0xFF
+        pkt[0] = 0x55            // 帧头
+        pkt[1] = 0xAA
+        pkt[2] = CMD_DRAW_RECT
+        pkt[3] = 0               // 算法 ID = AlgorithmAny（任意算法）
+        pkt[4] = 14              // 数据长度
+        pkt[19] = checksum(pkt, 19)
         sendChunked(pkt)
         readRetValue(120)
     }

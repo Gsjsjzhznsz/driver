@@ -37,9 +37,11 @@ music.play(music.tonePlayable(预警音调, music.beat(BeatFraction.Quarter)), m
 strip.showColor(neopixel.colors(NeoPixelColors.Green))
 basic.pause(500)
 strip.clear()
-// 屏幕：开机显示“监测中”（按官方协议直发屏幕命令），观众从摄像头屏幕即可看到系统已就绪
+// 屏幕：开机整屏铺满绿色背景 + 居中大字，观众一眼可见系统已就绪
+ScreenFix.fillRect(huskylens2.setRGB(0, 255, 0))
 ScreenFix.clearText()
-ScreenFix.drawText(huskylens2.setRGB(0, 255, 0), 48, 8, 4, "状态：监测中")
+ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 248, 170, "监测中")
+ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 256, 270, "系统就绪")
 屏幕状态 = 5
 
 // 循环1 主循环：按轮询间隔读取姿态，按ID亮灯/更新屏幕状态并派发任务
@@ -54,10 +56,12 @@ basic.forever(function () {
                 basic.showIcon(IconNames.Happy)
                 strip.showColor(neopixel.colors(NeoPixelColors.Green))
                 首次疲劳时间 = 0  // 恢复清醒，清空疲劳计时
-                // 屏幕：只在状态变化时刷新，不拖慢轮询
+                // 屏幕：状态变化时整屏铺满刷新，不拖慢轮询
                 if (屏幕状态 != 1) {
+                    ScreenFix.fillRect(huskylens2.setRGB(0, 255, 0))
                     ScreenFix.clearText()
-                    ScreenFix.drawText(huskylens2.setRGB(0, 255, 0), 48, 8, 4, "状态：清醒")
+                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 224, 170, "司机清醒")
+                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 176, 270, "监测中，请安全驾驶")
                     屏幕状态 = 1
                 }
             } else if (huskylens2.poseIdExists(2)) {
@@ -66,10 +70,12 @@ basic.forever(function () {
                 首次疲劳时间 = 0
                 动作中 = true
                 报警请求 = true
-                // 屏幕：红色报警大字，报警全程保持显示
+                // 屏幕：整屏铺满红色报警背景 + 白色大字，报警全程保持显示
                 if (屏幕状态 != 3) {
+                    ScreenFix.fillRect(huskylens2.setRGB(255, 0, 0))
                     ScreenFix.clearText()
-                    ScreenFix.drawText(huskylens2.setRGB(255, 0, 0), 48, 8, 4, "状态：打瞌睡报警")
+                    ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 48, 200, 170, "打瞌睡报警")
+                    ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 32, 224, 270, "请立即休息！")
                     屏幕状态 = 3
                 }
             } else if (huskylens2.poseIdExists(3)) {
@@ -85,28 +91,34 @@ basic.forever(function () {
                 if (input.runningTime() - 首次疲劳时间 > 疲劳升级毫秒) {
                     首次疲劳时间 = 0
                     报警请求 = true
-                    // 屏幕：疲劳太久，升级为报警
+                    // 屏幕：疲劳太久，升级为报警——整屏铺满红色 + 白色大字
                     if (屏幕状态 != 3) {
+                        ScreenFix.fillRect(huskylens2.setRGB(255, 0, 0))
                         ScreenFix.clearText()
-                        ScreenFix.drawText(huskylens2.setRGB(255, 0, 0), 48, 8, 4, "状态：打瞌睡报警")
+                        ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 48, 200, 170, "打瞌睡报警")
+                        ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 32, 224, 270, "请立即休息！")
                         屏幕状态 = 3
                     }
                 } else {
                     预警请求 = true
-                    // 屏幕：黄色预警提示观众
+                    // 屏幕：整屏铺满黄色预警背景 + 黑色大字
                     if (屏幕状态 != 2) {
+                        ScreenFix.fillRect(huskylens2.setRGB(255, 255, 0))
                         ScreenFix.clearText()
-                        ScreenFix.drawText(huskylens2.setRGB(255, 255, 0), 48, 8, 4, "状态：疲劳预警")
+                        ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 224, 170, "疲劳预警")
+                        ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 240, 270, "请注意休息")
                         屏幕状态 = 2
                     }
                 }
             } else {
                 basic.showIcon(IconNames.No)
                 首次疲劳时间 = 0
-                // 屏幕：可见姿态不匹配已学习的ID
+                // 屏幕：整屏铺满白色背景 + 黑色大字（可见姿态不匹配已学习的ID）
                 if (屏幕状态 != 4) {
+                    ScreenFix.fillRect(huskylens2.setRGB(255, 255, 255))
                     ScreenFix.clearText()
-                    ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 48, 8, 4, "状态：姿态未识别")
+                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 200, 170, "姿态未识别")
+                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 224, 270, "请正对摄像头")
                     屏幕状态 = 4
                 }
             }
@@ -114,10 +126,12 @@ basic.forever(function () {
     } else {
         if (!(动作中)) {
             basic.showIcon(IconNames.No)
-            // 屏幕：看不到司机，立即提示观众
+            // 屏幕：看不到司机，整屏铺满白色背景 + 黑色大字
             if (屏幕状态 != 6) {
+                ScreenFix.fillRect(huskylens2.setRGB(255, 255, 255))
                 ScreenFix.clearText()
-                ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 48, 8, 4, "状态：未检测到司机")
+                ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 176, 170, "未检测到司机")
+                ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 224, 270, "请坐到驾驶位")
                 屏幕状态 = 6
             }
             // 行为保护：超过丢失超时仍看不到司机，停马达并清灯（只执行一次）
