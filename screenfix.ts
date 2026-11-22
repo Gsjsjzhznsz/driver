@@ -24,6 +24,12 @@
 //      （READY/AWAKE/TIRED!/SLEEP!/NO POSE/NO DRIVER），标题字母间加空格拉开
 //      宽度；中文状态语义交给整屏颜色（绿=清醒 黄=疲劳 红=打瞌睡 白=未检测）
 //      与 micro:bit 点阵、RGB 灯共同表达。
+//   5) 整屏状态面板（本次升级，观众反馈“再高级一点”）：新增 showPanel 积木，
+//      一块积木画出仪表盘 HUD：深蓝标题栏（DRIVER MONITOR + 状态指示灯）→
+//      白描边卡片内 48 号状态大字（卡片随文字自适应宽度）→ 32 号副标题 →
+//      疲劳度仪表条（深蓝底，状态色进度：清醒10%/疲劳60%/打瞌睡100%）→
+//      页脚 FATIGUE LEVEL 读数与版本号；面板内部自动判重：状态不变不重绘，
+//      每 60 秒强制重绘一次（相机中途断电重启可自愈），不拖慢 50ms 轮询。
 //
 // 屏幕参数（官方协议）：分辨率 640x480，坐标原点左上角，x:0~640、y:0~480；
 //   字号仅支持 20/24/26/27/28/32/36/40/48（无效字号固件拒绝不画）；
@@ -300,5 +306,126 @@ namespace ScreenFix {
             basic.pause(10)
         }
         return -1
+    }
+
+    // ==================== 整屏状态面板（仪表盘 HUD） ====================
+
+    export enum PanelState {
+        //% block="开机自检（绿）"
+        Ready = 5,
+        //% block="清醒监测（绿）"
+        Awake = 1,
+        //% block="疲劳预警（黄）"
+        Tired = 2,
+        //% block="打瞌睡报警（红）"
+        Sleep = 3,
+        //% block="姿态未识别（白）"
+        NoPose = 4,
+        //% block="未检测到司机（白）"
+        NoDriver = 6
+    }
+
+    // 面板配色（0xRRGGBB）：深海军蓝作结构色，高饱和状态底色远看清晰，
+    // 与 micro:bit 点阵、RGB 灯的状态色保持一致
+    const C_NAVY = 0x102A43        // 标题栏 / 仪表条 / 深色文字
+    const C_WHITE = 0xFFFFFF       // 白色文字 / 白色描边
+    const C_BG_GREEN = 0x00CD50    // 清醒底色（饱和绿）
+    const C_BG_YELLOW = 0xFFC800   // 疲劳底色（饱和黄）
+    const C_BG_RED = 0xE81C28      // 打瞌睡底色（饱和红）
+    const C_BG_GRAY = 0xF0F0F0     // 未检测底色（浅灰白）
+    const C_ACC_GREEN = 0x96FFB4   // 清醒进度条 / 指示灯（亮绿）
+    const C_ACC_ORANGE = 0xFF8C00  // 疲劳进度条 / 指示灯（橙）
+    const C_ACC_GRAY = 0x969696    // 未检测指示灯（灰）
+
+    let lastPanel = 0              // 上次画出的面板（判重用，0=未画过）
+    let lastPanelMs = 0            // 上次重绘时刻，用于 60 秒周期自愈刷新
+
+    // ASCII 大写平均字宽约 0.6×字号：按此估宽求居中 x（与生成器校验公式一致）
+    function hudCenter(text: string, fontSize: number): number {
+        let x = (640 - text.length * 6 * fontSize / 10) / 2
+        if (x < 0) { x = 0 }
+        return Math.floor(x)
+    }
+
+    // 实心色条：与 fillRect 同理，画"外框 + 内框"两层嵌套描边矩形，线宽取短边
+    // 一半——固件把描边画在边线内侧时外框已铺满；画在边线居中时内框外扩的
+    // 半个线宽恰好补上外框中央的空洞，两层相加必然铺满（单个矩形不能保证）
+    function hudBar(color: number, x: number, y: number, w: number, h: number): void {
+        const lw = Math.floor((w < h ? w : h) / 2)
+        drawRectRaw(color, lw, x, y, w, h)
+        drawRectRaw(color, lw, x + Math.floor(lw / 2), y + Math.floor(lw / 2), w - lw, h - lw)
+    }
+
+    /**
+     * 整屏状态面板（仪表盘 HUD）：深蓝标题栏 + 白框大字卡片 + 疲劳度仪表条。
+     * 内部自动判重：状态不变且 60 秒内刷新过则直接返回，稳定状态下
+     * 不产生任何屏幕 I2C 通信；相机若中途断电重启，60 秒周期重绘自愈。
+     */
+    //% blockId="ScreenFix_showPanel" block="屏幕状态面板 %v"
+    //% weight=92
+    export function showPanel(state: PanelState): void {
+        const now = input.runningTime()
+        if (state == lastPanel && now - lastPanelMs < 60000) { return }
+        lastPanel = state
+        lastPanelMs = now
+        // 各状态面板参数：底色 / 文字色 / 卡片描边色 / 进度条与指示灯色 / 大字 / 副标题 / 疲劳度%
+        let bg = 0
+        let ink = 0
+        let frame = 0
+        let accent = 0
+        let big = ""
+        let sub = ""
+        let level = 0
+        switch (state) {
+            case PanelState.Awake:
+                bg = C_BG_GREEN; ink = C_NAVY; frame = C_WHITE; accent = C_ACC_GREEN
+                big = "AWAKE"; sub = "POSE OK - KEEP DRIVING"; level = 10
+                break
+            case PanelState.Tired:
+                bg = C_BG_YELLOW; ink = C_NAVY; frame = C_NAVY; accent = C_ACC_ORANGE
+                big = "TIRED!"; sub = "TAKE A REST SOON"; level = 60
+                break
+            case PanelState.Sleep:
+                bg = C_BG_RED; ink = C_WHITE; frame = C_WHITE; accent = C_WHITE
+                big = "SLEEP!"; sub = "WAKE UP !!! ALARM"; level = 100
+                break
+            case PanelState.NoPose:
+                bg = C_BG_GRAY; ink = C_NAVY; frame = C_NAVY; accent = C_ACC_GRAY
+                big = "NO POSE"; sub = "LOOK AT CAMERA"; level = 0
+                break
+            case PanelState.NoDriver:
+                bg = C_BG_GRAY; ink = C_NAVY; frame = C_NAVY; accent = C_ACC_GRAY
+                big = "NO DRIVER"; sub = "SIT IN SEAT"; level = 0
+                break
+            default:
+                // Ready（开机自检）：与清醒同为绿色系，大字 READY
+                bg = C_BG_GREEN; ink = C_NAVY; frame = C_WHITE; accent = C_ACC_GREEN
+                big = "READY"; sub = "SYSTEM OK"; level = 0
+                break
+        }
+        // 1) 整屏底色：清旧矩形 + 两层嵌套矩形铺满（fillRect 复用）
+        fillRect(bg)
+        clearText()
+        // 2) 顶部标题栏：深蓝底 + 白字标题 + 状态指示灯方块
+        hudBar(C_NAVY, 0, 0, 640, 72)
+        drawText(C_WHITE, 28, 24, 22, "DRIVER MONITOR")
+        hudBar(accent, 596, 26, 20, 20)
+        // 3) 中央卡片：细描边 + 48 号状态大字（卡片宽度随文字自适应）
+        const bw = big.length * 6 * 48 / 10
+        let cw = bw + 120
+        if (cw < 300) { cw = 300 }
+        drawRectRaw(frame, 5, Math.floor((640 - cw) / 2), 104, Math.floor(cw), 144)
+        drawText(ink, 48, Math.floor((640 - bw) / 2), 152, big)
+        // 4) 副标题一行
+        drawText(ink, 32, hudCenter(sub, 32), 284, sub)
+        // 5) 疲劳度仪表条：深蓝底 + 状态色进度 + 页脚读数与版本号
+        hudBar(C_NAVY, 40, 352, 560, 56)
+        if (level > 0) {
+            let fw = Math.floor(544 * level / 100)
+            if (fw < 40) { fw = 40 }
+            hudBar(accent, 48, 360, fw, 40)
+        }
+        drawText(ink, 20, 40, 424, "FATIGUE LEVEL: " + level.toString() + "%")
+        drawText(ink, 20, 552, 424, "v2.0")
     }
 }

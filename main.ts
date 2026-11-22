@@ -22,7 +22,6 @@ let 振动请求 = false
 let 丢失停机 = false // 已因丢失姿态而停机
 let 首次疲劳时间 = 0 // 疲劳征兆首次出现的时间，用于持续计时
 let 最后检测时间 = 0
-let 屏幕状态 = 0 // 摄像头屏幕当前状态：1=清醒 2=疲劳预警 3=打瞌睡报警 4=姿态未识别 5=监测中(开机) 6=未检测到司机
 
 // 硬件初始化区：HUSKYLENS 用 I2C（P19/P20），灯与方向盘振动马达走 RobotBit
 huskylens2.I2CInit()
@@ -37,14 +36,10 @@ music.play(music.tonePlayable(预警音调, music.beat(BeatFraction.Quarter)), m
 strip.showColor(neopixel.colors(NeoPixelColors.Green))
 basic.pause(500)
 strip.clear()
-// 屏幕：开机整屏铺满绿色背景 + 居中英文大字（固件字体不含中文，画中文只会乱码）
-ScreenFix.fillRect(huskylens2.setRGB(0, 255, 0))
-ScreenFix.clearText()
-ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 190, 170, "R E A D Y")
-ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 233, 270, "SYSTEM OK")
-屏幕状态 = 5
+// 屏幕：开机显示 READY 状态面板（仪表盘 HUD：深蓝标题栏+白框大字+疲劳度仪表条）
+ScreenFix.showPanel(ScreenFix.PanelState.Ready)
 
-// 循环1 主循环：按轮询间隔读取姿态，按ID亮灯/更新屏幕状态并派发任务
+// 循环1 主循环：按轮询间隔读取姿态，按ID亮灯/更新屏幕面板并派发任务
 basic.forever(function () {
     huskylens2.getResultPoseRecognition()
     if (huskylens2.availablePoseRecognition()) {
@@ -56,28 +51,16 @@ basic.forever(function () {
                 basic.showIcon(IconNames.Happy)
                 strip.showColor(neopixel.colors(NeoPixelColors.Green))
                 首次疲劳时间 = 0  // 恢复清醒，清空疲劳计时
-                // 屏幕：状态变化时整屏铺满刷新，不拖慢轮询
-                if (屏幕状态 != 1) {
-                    ScreenFix.fillRect(huskylens2.setRGB(0, 255, 0))
-                    ScreenFix.clearText()
-                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 190, 170, "A W A K E")
-                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 204, 270, "KEEP DRIVING")
-                    屏幕状态 = 1
-                }
+                // 屏幕：显示清醒面板（面板内部判重，状态不变不重绘）
+                ScreenFix.showPanel(ScreenFix.PanelState.Awake)
             } else if (huskylens2.poseIdExists(2)) {
                 // 打瞌睡：请求重度报警，振动同时开始
                 basic.showIcon(IconNames.Sad)
                 首次疲劳时间 = 0
                 动作中 = true
                 报警请求 = true
-                // 屏幕：整屏铺满红色报警背景 + 白色大字，报警全程保持显示
-                if (屏幕状态 != 3) {
-                    ScreenFix.fillRect(huskylens2.setRGB(255, 0, 0))
-                    ScreenFix.clearText()
-                    ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 48, 161, 170, "S L E E P !")
-                    ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 32, 214, 270, "WAKE UP !!!")
-                    屏幕状态 = 3
-                }
+                // 屏幕：显示打瞌睡报警面板（红色，报警全程保持）
+                ScreenFix.showPanel(ScreenFix.PanelState.Sleep)
             } else if (huskylens2.poseIdExists(3)) {
                 // 疲劳征兆：红灯
                 basic.showIcon(IconNames.Scissors)
@@ -91,49 +74,25 @@ basic.forever(function () {
                 if (input.runningTime() - 首次疲劳时间 > 疲劳升级毫秒) {
                     首次疲劳时间 = 0
                     报警请求 = true
-                    // 屏幕：疲劳太久，升级为报警——整屏铺满红色 + 白色大字
-                    if (屏幕状态 != 3) {
-                        ScreenFix.fillRect(huskylens2.setRGB(255, 0, 0))
-                        ScreenFix.clearText()
-                        ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 48, 161, 170, "S L E E P !")
-                        ScreenFix.drawText(huskylens2.setRGB(255, 255, 255), 32, 214, 270, "WAKE UP !!!")
-                        屏幕状态 = 3
-                    }
+                    // 屏幕：疲劳太久升级为报警，显示打瞌睡报警面板
+                    ScreenFix.showPanel(ScreenFix.PanelState.Sleep)
                 } else {
                     预警请求 = true
-                    // 屏幕：整屏铺满黄色预警背景 + 黑色大字
-                    if (屏幕状态 != 2) {
-                        ScreenFix.fillRect(huskylens2.setRGB(255, 255, 0))
-                        ScreenFix.clearText()
-                        ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 161, 170, "T I R E D !")
-                        ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 214, 270, "TAKE A REST")
-                        屏幕状态 = 2
-                    }
+                    // 屏幕：显示疲劳预警面板（黄色）
+                    ScreenFix.showPanel(ScreenFix.PanelState.Tired)
                 }
             } else {
                 basic.showIcon(IconNames.No)
                 首次疲劳时间 = 0
-                // 屏幕：整屏铺满白色背景 + 黑色大字（可见姿态不匹配已学习的ID）
-                if (屏幕状态 != 4) {
-                    ScreenFix.fillRect(huskylens2.setRGB(255, 255, 255))
-                    ScreenFix.clearText()
-                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 161, 170, "N O P O S E")
-                    ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 185, 270, "LOOK AT CAMERA")
-                    屏幕状态 = 4
-                }
+                // 屏幕：显示姿态未识别面板（白色，可见姿态不匹配已学习的ID）
+                ScreenFix.showPanel(ScreenFix.PanelState.NoPose)
             }
         }
     } else {
         if (!(动作中)) {
             basic.showIcon(IconNames.No)
-            // 屏幕：看不到司机，整屏铺满白色背景 + 黑色大字
-            if (屏幕状态 != 6) {
-                ScreenFix.fillRect(huskylens2.setRGB(255, 255, 255))
-                ScreenFix.clearText()
-                ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 48, 190, 170, "NO DRIVER")
-                ScreenFix.drawText(huskylens2.setRGB(0, 0, 0), 32, 214, 270, "SIT IN SEAT")
-                屏幕状态 = 6
-            }
+            // 屏幕：显示未检测到司机面板（白色）
+            ScreenFix.showPanel(ScreenFix.PanelState.NoDriver)
             // 行为保护：超过丢失超时仍看不到司机，停马达并清灯（只执行一次）
             if (input.runningTime() - 最后检测时间 > 丢失超时 && !(丢失停机)) {
                 robotbit.MotorStop(robotbit.Motors.M1A)
