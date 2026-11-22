@@ -29,6 +29,9 @@ huskylens2.I2CInit()
 huskylens2.switchAlgorithm(huskylens2.Algorithm.AlgorithmPoseRecognition)
 let strip = robotbit.rgb()
 robotbit.MotorStop(robotbit.Motors.M1A)  // 上电先确保振动马达停止
+// 屏幕固件协议：默认旧版布局（2026-10-29 官方协议 V0.4 发布前出厂的 HUSKYLENS 2）。
+// 若已升级 HUSKYLENS 固件，请把该积木下拉改为“新版固件（官方协议V0.4）”。
+ScreenFix.setProtocolVersion(ScreenFix.ScreenProtocol.Legacy)
 // 开机自检：短鸣一声、绿灯亮0.5秒，表示初始化完成
 music.play(music.tonePlayable(预警音调, music.beat(BeatFraction.Quarter)), music.PlaybackMode.UntilDone)
 strip.showColor(neopixel.colors(NeoPixelColors.Green))
